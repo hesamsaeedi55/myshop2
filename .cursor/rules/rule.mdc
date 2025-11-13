@@ -1,0 +1,5 @@
+---
+description: do not use chat gpt 5 for my requests
+globs:
+alwaysApply: true
+---

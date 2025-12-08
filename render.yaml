@@ -1,12 +1,12 @@
-services:
+databases:
   # PostgreSQL Database
-  - type: postgresql
-    name: myshop2-db
+  - name: myshop2-db
     plan: free
     databaseName: myshop2
-    databaseUser: myshop2_user
+    user: myshop2_user
     region: oregon
 
+services:
   # Django Web Service
   - type: web
     name: myshop2

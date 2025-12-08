@@ -2,13 +2,13 @@ services:
   - type: web
     name: myshop2
     env: python
-    rootDir: myshop2/myshop
     buildCommand: |
-      pip install -r requirements.txt &&
+      pip install -r myshop2/myshop/requirements.txt &&
+      cd myshop2/myshop &&
       python manage.py makemigrations image_editor &&
       python manage.py migrate --no-input &&
       python manage.py collectstatic --no-input
-    startCommand: gunicorn myshop.wsgi:application
+    startCommand: cd myshop2/myshop && gunicorn myshop.wsgi:application
     envVars:
       - key: PYTHON_VERSION
         value: 3.10.0

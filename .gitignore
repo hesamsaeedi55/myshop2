@@ -60,4 +60,8 @@ build/
 *_FIXED.swift
 *_DEBUG.swift
 backup*/
-*.backup 
+*.backup
+
+# Node modules
+node_modules/
+package-lock.json

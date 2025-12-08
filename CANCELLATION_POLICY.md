@@ -217,3 +217,5 @@ class CheckoutViewModel: ObservableObject {
 
 This is actually the **standard e-commerce pattern** - once you click "Place Order", you can't cancel the request (though you might be able to cancel the order after it's created, which is different).
 
+
+

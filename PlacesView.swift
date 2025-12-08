@@ -10,6 +10,16 @@ import SwiftUI
 import Combine
 import Kingfisher
 
+// MARK: - Wishlist Operation State Enum
+// This enum is OUTSIDE the struct, at file level - can be used anywhere
+// ✅ Conforms to Equatable so it can be used with animation modifiers
+enum WishlistOperationState: Equatable {
+    case idle
+    case adding
+    case success(message: String)
+    case error(message: String)
+}
+
 struct PlacesView1: View {
     
     // MARK: - Constants
@@ -38,6 +48,7 @@ struct PlacesView1: View {
     @State var isFullScreen: Bool = false
     @State var isTapped: Bool = false
     @State private var isButtonDisabled = false
+    @State private var wishlistState: WishlistOperationState = .idle
     @State var shimmerView = false
     @State var specialAttribute: String = ""
     @State var imagesOfDisplay: [String] = []
@@ -100,6 +111,7 @@ struct PlacesView1: View {
         ZStack {
             removeFromWishList()
             addToWishList()
+            wishlistFeedbackView()  // New enum-based feedback view
             
             VStack(spacing:0) {
                 navBar()
@@ -343,6 +355,9 @@ struct PlacesView1: View {
                             }
                         }else{
                             Task {
+                                // Set state to loading
+                                wishlistState = .adding
+                                
                                 do {
                                     let response = try await viewModel.addToWishlist(product)
                                     
@@ -364,20 +379,34 @@ struct PlacesView1: View {
                                             }
                                         }
                                         
-                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                                            isTapped = true
-                                        }
+                                        // Set state to success
+                                        wishlistState = .success(message: "به لیست دوست داشتنیا اضافه شد")
                                         
-                                        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                                            withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
-                                                isTapped = false
-                                            }
+                                        // Auto-reset to idle after 2 seconds
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                            wishlistState = .idle
+                                            isButtonDisabled = false
+                                        }
+                                    } else {
+                                        // Set state to error
+                                        wishlistState = .error(message: "couldn't add to wishlist")
+                                        
+                                        // Auto-reset to idle after 2 seconds
+                                        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                            wishlistState = .idle
                                             isButtonDisabled = false
                                         }
                                     }
                                 } catch {
                                     print("❌ Error: \(error)")
-                                    isButtonDisabled = false
+                                    // Set state to error
+                                    wishlistState = .error(message: "couldn't add to wishlist")
+                                    
+                                    // Auto-reset to idle after 2 seconds
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
+                                        wishlistState = .idle
+                                        isButtonDisabled = false
+                                    }
                                 }
                             }
                         }
@@ -790,6 +819,48 @@ struct PlacesView1: View {
         .opacity(isDeleteTapped ? 1 : 0)
         .zIndex(15)
         .animation(.easeInOut(duration: 0.5), value: isDeleteTapped)
+    }
+    
+    // MARK: - New Enum-Based Wishlist Feedback View
+    @ViewBuilder
+    private func wishlistFeedbackView() -> some View {
+        ZStack {
+            CustomBlurView(effect: .systemThinMaterial)
+                .ignoresSafeArea()
+            
+            VStack(spacing: 12) {
+                switch wishlistState {
+                case .idle:
+                    EmptyView()
+                    
+                case .adding:
+                    Text("Adding...")
+                        .font(.custom("DoranNoEn-Bold", size: 16, relativeTo: .body))
+                        .foregroundColor(.black)
+                    ProgressView()
+                        .progressViewStyle(CircularProgressViewStyle(tint: .black))
+                    
+                case .success(let message):
+                    Text(message)
+                        .font(.custom("DoranNoEn-Bold", size: 16, relativeTo: .body))
+                        .foregroundColor(.black)
+                        .padding()
+                        .background(CustomBlurView(effect: .systemUltraThinMaterial))
+                        .cornerRadius(10)
+                    
+                case .error(let message):
+                    Text(message)
+                        .font(.custom("DoranNoEn-Bold", size: 16, relativeTo: .body))
+                        .foregroundColor(.red)
+                        .padding()
+                        .background(CustomBlurView(effect: .systemUltraThinMaterial))
+                        .cornerRadius(10)
+                }
+            }
+        }
+        .opacity(wishlistState == .idle ? 0 : 1)
+        .zIndex(15)
+        .animation(.easeInOut(duration: 0.3), value: wishlistState)
     }
     
     @ViewBuilder

@@ -162,6 +162,9 @@ struct TabBarIcon2: View {
     let width: CGFloat
     let height: CGFloat
     
+    @State private var isRotating = false
+    @State private var previousTab: NavigationStackManager.TabPage?
+    
     var body: some View {
         Button {
             navigationManager.navigateTo(assignedPage)
@@ -171,6 +174,26 @@ struct TabBarIcon2: View {
                 .aspectRatio(contentMode: .fit)
                 .frame(width: width, height: height)
                 .foregroundColor(navigationManager.currentTab == assignedPage ? .blue : .gray)
+                .rotationEffect(.degrees(isRotating ? 360 : 0))
+                .animation(isRotating ? .linear(duration: 2).repeatForever(autoreverses: false) : .default, value: isRotating)
+                .onChange(of: navigationManager.currentTab) { newTab in
+                    let wasActive = previousTab == assignedPage
+                    let isNowActive = newTab == assignedPage
+                    
+                    // Only animate when transitioning from inactive to active
+                    if !wasActive && isNowActive {
+                        isRotating = true
+                    } else if wasActive && !isNowActive {
+                        // Stop rotation when becoming inactive
+                        isRotating = false
+                    }
+                    
+                    previousTab = newTab
+                }
+                .onAppear {
+                    previousTab = navigationManager.currentTab
+                    isRotating = navigationManager.currentTab == assignedPage
+                }
         }
     }
 }

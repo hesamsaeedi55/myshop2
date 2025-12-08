@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import Network
 import GoogleSignIn
 import GoogleSignInSwift
 
@@ -400,6 +401,39 @@ class AuthViewModel: ObservableObject {
         let email: String
     }
     
+    // MARK: - Sign Up Models
+    struct SignUpCredential: Codable {
+        let email: String
+        let first_name: String
+        let last_name: String
+        let date_of_birth: String
+        let phone_number: String
+        let password1: String
+        let password2: String
+    }
+    
+    struct SignUpResponse: Codable {
+        let message: String
+    }
+    
+    struct SignUpErrorResponse: Codable {
+        let error: String
+        let details: [String: [String]]?
+        let field_count: Int?
+    }
+    
+    // MARK: - User Info Model
+    struct UserInfo: Codable {
+        let id: Int
+        let email: String
+        let first_name: String
+        let last_name: String
+        let phone_number: String?
+        let is_active: Bool
+        let is_email_verified: Bool
+        let login_method: String
+    }
+    
     enum AuthError: LocalizedError {
         case missingClientID
         case noRootViewController
@@ -409,6 +443,7 @@ class AuthViewModel: ObservableObject {
         case serverError(statusCode: Int)
         case noRefreshToken
         case invalidToken
+        case validationError(message: String, details: [String: [String]]?)
         
         var errorDescription: String? {
             switch self {
@@ -428,7 +463,124 @@ class AuthViewModel: ObservableObject {
                 return "No refresh token found"
             case .invalidToken:
                 return "Invalid or expired token"
+            case .validationError(let message, _):
+                return message
             }
+        }
+    }
+    
+    // MARK: - Sign Up
+    @Published var isSigningUP = false
+    
+    func signUp(first_name: String, last_name: String, email: String, phone_number: String, date_of_birth: String, password1: String, password2: String) async throws {
+        guard !isSigningUP else { return }
+        
+        isSigningUP = true
+        defer { isSigningUP = false }
+        
+        // Check internet connection
+        guard await checkInternetConnection() else {
+            throw NetworkError.noInternet.toNSError()
+        }
+        
+        errorMessage = nil
+        
+        guard let url = URL(string: "\(baseURL)/accounts/register/") else {
+            throw NetworkError.unknown("Invalid URL").toNSError()
+        }
+        
+        let credentials = SignUpCredential(
+            email: email,
+            first_name: first_name,
+            last_name: last_name,
+            date_of_birth: date_of_birth,
+            phone_number: phone_number,
+            password1: password1,
+            password2: password2
+        )
+        
+        do {
+            let encodedData = try JSONEncoder().encode(credentials)
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = encodedData
+            
+            let (data, response) = try await URLSession.shared.data(for: request)
+            
+            guard let httpResponse = response as? HTTPURLResponse else {
+                throw NetworkError.unknown("Invalid Response").toNSError()
+            }
+            
+            if let responseString = String(data: data, encoding: .utf8) {
+                print("📋 Server Response: \(responseString)")
+            }
+            
+            // Handle error responses (400, 500, etc.)
+            if httpResponse.statusCode != 200 {
+                // Try to decode error response
+                if let errorResponse = try? JSONDecoder().decode(SignUpErrorResponse.self, from: data) {
+                    print("❌ Validation Error: \(errorResponse.error)")
+                    if let details = errorResponse.details {
+                        print("❌ Error Details: \(details)")
+                    }
+                    // Throw validation error with user-friendly message
+                    throw AuthError.validationError(
+                        message: errorResponse.error,
+                        details: errorResponse.details
+                    )
+                } else {
+                    // Fallback for other error types
+                    if let error = NetworkError.from(httpStatusCode: httpResponse.statusCode) {
+                        throw error.toNSError()
+                    } else {
+                        throw NetworkError.unknown("Server returned status code: \(httpResponse.statusCode)").toNSError()
+                    }
+                }
+            }
+            
+            // Decode successful response
+            let signUpResponse = try JSONDecoder().decode(SignUpResponse.self, from: data)
+            print("✅ \(signUpResponse.message)")
+            
+            // Auto-login after successful registration (optional)
+            // try await login(email: email, password: password1)
+            isAuthenticated = true
+            
+        } catch let authError as AuthError {
+            // Handle AuthError (including validation errors)
+            errorMessage = authError.errorDescription
+            print("❌ Auth Error: \(authError.errorDescription ?? "Unknown")")
+            throw authError
+        } catch let decodingError as DecodingError {
+            print("❌ Decoding Error: \(decodingError)")
+            errorMessage = "Failed to decode server response"
+            throw NetworkError.unknown("Failed to decode response").toNSError()
+        } catch {
+            if let urlerror = error as? URLError {
+                throw NetworkError.from(urlerror).toNSError()
+            }
+            print("❌ Error: \(error.localizedDescription)")
+            errorMessage = error.localizedDescription
+            throw error
+        }
+    }
+    
+    // MARK: - Internet Connection Check
+    private func checkInternetConnection() async -> Bool {
+        let monitor = NWPathMonitor()
+        let queue = DispatchQueue(label: "NetworkMonitor")
+        
+        return await withCheckedContinuation { continuation in
+            monitor.pathUpdateHandler = { path in
+                if path.status == .satisfied {
+                    continuation.resume(returning: true)
+                } else {
+                    continuation.resume(returning: false)
+                }
+                monitor.cancel()
+            }
+            monitor.start(queue: queue)
         }
     }
 }

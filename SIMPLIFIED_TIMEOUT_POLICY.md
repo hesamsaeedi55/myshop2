@@ -119,3 +119,5 @@ For critical operations (checkout, payment):
 - No need for cancellation complexity
 - Better UX (clear loading, fast feedback)
 
+
+

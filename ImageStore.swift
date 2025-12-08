@@ -147,6 +147,12 @@ class ImageStore: ObservableObject {
                 return image
                 
             } catch {
+                // Treat cancelled requests as non-fatal and don't retry
+                if let urlError = error as? URLError, urlError.code == .cancelled {
+                    print("ℹ️ Image download cancelled for \(url.lastPathComponent)")
+                    return nil
+                }
+                
                 print("❌ Download failed for \(url.lastPathComponent) (attempt \(attempt)): \(error.localizedDescription)")
                 
                 // Check if we should retry

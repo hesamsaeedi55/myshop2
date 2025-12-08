@@ -200,3 +200,5 @@ If you want to keep it simple:
 
 **My recommendation:** Use **Progressive Timeout** - it's the best balance of simplicity and UX.
 
+
+

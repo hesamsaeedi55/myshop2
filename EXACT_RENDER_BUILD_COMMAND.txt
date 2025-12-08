@@ -1,0 +1,2 @@
+cd myshop2/myshop && pip install -r requirements.txt && python manage.py makemigrations image_editor && python manage.py migrate --no-input && python manage.py collectstatic --no-input
+

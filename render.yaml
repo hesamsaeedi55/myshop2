@@ -14,7 +14,7 @@ services:
     plan: free
     region: oregon
     rootDir: myshop2/myshop
-    buildCommand: git submodule update --init --recursive && pip install -r requirements.txt && python manage.py makemigrations image_editor && python manage.py migrate --no-input && python manage.py collectstatic --no-input
+    buildCommand: pip install -r ../requirements.txt && python manage.py makemigrations image_editor && python manage.py migrate --no-input && python manage.py collectstatic --no-input
     startCommand: gunicorn myshop.wsgi:application
     envVars:
       - key: PYTHON_VERSION

@@ -1,4 +1,0 @@
-[submodule "myshop2/myshop"]
-	path = myshop2/myshop
-	url = https://github.com/hesamsaeedi55/myshop-backend.git
-	branch = IOS

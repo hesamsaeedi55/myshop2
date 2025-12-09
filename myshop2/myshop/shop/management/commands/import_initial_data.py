@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.core.management import call_command
 from django.db.models.signals import post_save
 from django.db import IntegrityError, transaction
-from shop.models import Product, Category, CategoryAttribute
+from shop.models import Product, Category, CategoryAttribute, ProductImage, ProductVariant, AttributeValue
 from shop.signals import inherit_parent_attributes_for_new_category
 import shop.signals
 
@@ -21,30 +21,12 @@ class Command(BaseCommand):
             )
             return
         
-        # Clear existing data to avoid ID conflicts
-        self.stdout.write('Clearing existing shop data to avoid conflicts...')
-        try:
-            from shop.models import ProductImage, ProductVariant, Product, CategoryAttribute, AttributeValue
-            ProductImage.objects.all().delete()
-            ProductVariant.objects.all().delete()
-            Product.objects.all().delete()
-            CategoryAttribute.objects.all().delete()
-            AttributeValue.objects.all().delete()
-            # Don't delete categories - they might be needed
-            self.stdout.write('Cleared existing products and attributes.')
-        except Exception as e:
-            self.stdout.write(f'Note: Could not clear existing data: {str(e)[:100]}')
-        
         # Database is empty, import data
         self.stdout.write('Database is empty. Importing initial data...')
         
         # Clear ALL shop-related data to avoid ID conflicts
         self.stdout.write('Clearing existing shop data to avoid ID conflicts...')
         try:
-            from shop.models import (
-                ProductImage, ProductVariant, Product, CategoryAttribute, 
-                AttributeValue, Category
-            )
             # Delete in reverse dependency order
             ProductImage.objects.all().delete()
             ProductVariant.objects.all().delete()

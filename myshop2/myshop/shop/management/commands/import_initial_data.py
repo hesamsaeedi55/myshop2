@@ -50,14 +50,53 @@ class Command(BaseCommand):
                     by_model[model_name] = []
                 by_model[model_name].append(obj_data)
             
-            # Import each model type
-            for model_name, objects in by_model.items():
+            # Import in order: categories first, then attributes (to avoid signal issues)
+            import_order = [
+                'shop.category',
+                'shop.tag',
+                'shop.categoryattribute',
+                'shop.attributevalue',
+                'shop.product',
+                'shop.productimage',
+                'shop.productvariant',
+            ]
+            
+            # Add any other models
+            for model_name in by_model.keys():
+                if model_name not in import_order:
+                    import_order.append(model_name)
+            
+            # Import in order
+            for model_name in import_order:
+                if model_name not in by_model:
+                    continue
+                    
+                objects = by_model[model_name]
                 self.stdout.write(f'Importing {len(objects)} {model_name} records...')
+                
                 for obj_data in objects:
                     try:
-                        for obj in deserialize('json', json.dumps([obj_data])):
-                            obj.save()
-                        imported += 1
+                        # For CategoryAttribute, use get_or_create to avoid duplicates
+                        if model_name == 'shop.categoryattribute':
+                            fields = obj_data.get('fields', {})
+                            CategoryAttribute.objects.get_or_create(
+                                category_id=fields.get('category'),
+                                key=fields.get('key'),
+                                defaults={
+                                    'type': fields.get('type', 'text'),
+                                    'required': fields.get('required', False),
+                                    'display_order': fields.get('display_order', 0),
+                                    'label_fa': fields.get('label_fa', ''),
+                                    'is_displayed_in_product': fields.get('is_displayed_in_product', True),
+                                    'display_in_basket': fields.get('display_in_basket', False),
+                                }
+                            )
+                            imported += 1
+                        else:
+                            # For other models, use normal deserialization
+                            for obj in deserialize('json', json.dumps([obj_data])):
+                                obj.save()
+                            imported += 1
                     except IntegrityError as e:
                         # Duplicate or constraint violation - skip it
                         skipped += 1

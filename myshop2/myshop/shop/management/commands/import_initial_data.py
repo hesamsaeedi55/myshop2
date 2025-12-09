@@ -29,3 +29,4 @@ class Command(BaseCommand):
                 self.style.ERROR(f'Error importing data: {str(e)}')
             )
             raise
+

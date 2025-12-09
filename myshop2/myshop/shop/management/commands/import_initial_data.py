@@ -21,6 +21,20 @@ class Command(BaseCommand):
             )
             return
         
+        # Clear existing data to avoid ID conflicts
+        self.stdout.write('Clearing existing shop data to avoid conflicts...')
+        try:
+            from shop.models import ProductImage, ProductVariant, Product, CategoryAttribute, AttributeValue
+            ProductImage.objects.all().delete()
+            ProductVariant.objects.all().delete()
+            Product.objects.all().delete()
+            CategoryAttribute.objects.all().delete()
+            AttributeValue.objects.all().delete()
+            # Don't delete categories - they might be needed
+            self.stdout.write('Cleared existing products and attributes.')
+        except Exception as e:
+            self.stdout.write(f'Note: Could not clear existing data: {str(e)[:100]}')
+        
         # Database is empty, import data
         self.stdout.write('Database is empty. Importing initial data...')
         
@@ -79,19 +93,28 @@ class Command(BaseCommand):
                         # For CategoryAttribute, use get_or_create to avoid duplicates
                         if model_name == 'shop.categoryattribute':
                             fields = obj_data.get('fields', {})
-                            CategoryAttribute.objects.get_or_create(
-                                category_id=fields.get('category'),
-                                key=fields.get('key'),
-                                defaults={
-                                    'type': fields.get('type', 'text'),
-                                    'required': fields.get('required', False),
-                                    'display_order': fields.get('display_order', 0),
-                                    'label_fa': fields.get('label_fa', ''),
-                                    'is_displayed_in_product': fields.get('is_displayed_in_product', True),
-                                    'display_in_basket': fields.get('display_in_basket', False),
-                                }
-                            )
-                            imported += 1
+                            category_id = fields.get('category')
+                            # Check if category exists
+                            try:
+                                from shop.models import Category
+                                Category.objects.get(pk=category_id)
+                                CategoryAttribute.objects.get_or_create(
+                                    category_id=category_id,
+                                    key=fields.get('key'),
+                                    defaults={
+                                        'type': fields.get('type', 'text'),
+                                        'required': fields.get('required', False),
+                                        'display_order': fields.get('display_order', 0),
+                                        'label_fa': fields.get('label_fa', ''),
+                                        'is_displayed_in_product': fields.get('is_displayed_in_product', True),
+                                        'display_in_basket': fields.get('display_in_basket', False),
+                                    }
+                                )
+                                imported += 1
+                            except Category.DoesNotExist:
+                                skipped += 1
+                                # Category doesn't exist - skip this attribute
+                                pass
                         else:
                             # For other models, use normal deserialization
                             for obj in deserialize('json', json.dumps([obj_data])):

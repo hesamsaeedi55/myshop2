@@ -169,7 +169,9 @@ class Command(BaseCommand):
                     except Exception as e:
                         skipped += 1
                         if skipped <= 5:
-                            self.stdout.write(f'  ⚠️  Error/skip: {model_name} pk={obj_data.get(\"pk\")}: {str(e)[:120]}')
+                            self.stdout.write(
+                                f"  ⚠️  Error/skip: {model_name} pk={obj_data.get('pk')}: {str(e)[:120]}"
+                            )
             
             self.stdout.write(
                 self.style.SUCCESS(

@@ -2,7 +2,7 @@ from django.core.management.base import BaseCommand
 from django.core.management import call_command
 from django.db.models.signals import post_save
 from django.db import IntegrityError, transaction
-from shop.models import Product, Category, CategoryAttribute, ProductImage, ProductVariant, AttributeValue
+from shop import models as shop_models
 from shop.signals import inherit_parent_attributes_for_new_category
 import shop.signals
 
@@ -11,7 +11,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         # Check if database already has products
-        product_count = Product.objects.count()
+        product_count = shop_models.Product.objects.count()
         
         if product_count > 0:
             self.stdout.write(
@@ -28,13 +28,13 @@ class Command(BaseCommand):
         self.stdout.write('Clearing existing shop data to avoid ID conflicts...')
         try:
             # Delete in reverse dependency order
-            ProductImage.objects.all().delete()
-            ProductVariant.objects.all().delete()
-            Product.objects.all().delete()
-            CategoryAttribute.objects.all().delete()
-            AttributeValue.objects.all().delete()
+            shop_models.ProductImage.objects.all().delete()
+            shop_models.ProductVariant.objects.all().delete()
+            shop_models.Product.objects.all().delete()
+            shop_models.CategoryAttribute.objects.all().delete()
+            shop_models.AttributeValue.objects.all().delete()
             # Clear categories too so IDs match fixture
-            Category.objects.all().delete()
+            shop_models.Category.objects.all().delete()
             self.stdout.write('Cleared existing shop data.')
         except Exception as e:
             self.stdout.write(f'Note when clearing: {str(e)[:100]}')
@@ -43,7 +43,7 @@ class Command(BaseCommand):
         signal_disconnected = False
         try:
             # Disconnect the signal that causes issues during loaddata
-            post_save.disconnect(inherit_parent_attributes_for_new_category, sender=Category)
+            post_save.disconnect(inherit_parent_attributes_for_new_category, sender=shop_models.Category)
             signal_disconnected = True
             
             # Import with transaction handling to handle duplicates gracefully
@@ -97,9 +97,8 @@ class Command(BaseCommand):
                             category_id = fields.get('category')
                             # Check if category exists
                             try:
-                                from shop.models import Category
-                                Category.objects.get(pk=category_id)
-                                CategoryAttribute.objects.get_or_create(
+                                shop_models.Category.objects.get(pk=category_id)
+                                shop_models.CategoryAttribute.objects.get_or_create(
                                     category_id=category_id,
                                     key=fields.get('key'),
                                     defaults={
@@ -112,7 +111,7 @@ class Command(BaseCommand):
                                     }
                                 )
                                 imported += 1
-                            except Category.DoesNotExist:
+                            except shop_models.Category.DoesNotExist:
                                 skipped += 1
                                 # Category doesn't exist - skip this attribute
                                 pass
@@ -152,7 +151,7 @@ class Command(BaseCommand):
             # Reconnect the signal after loading
             if signal_disconnected:
                 try:
-                    post_save.connect(inherit_parent_attributes_for_new_category, sender=Category)
+                    post_save.connect(inherit_parent_attributes_for_new_category, sender=shop_models.Category)
                 except:
                     pass  # Signal might already be connected
 

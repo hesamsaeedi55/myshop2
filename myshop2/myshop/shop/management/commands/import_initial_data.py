@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
 from django.core.management import call_command
 from django.db.models.signals import post_save
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, transaction, connection
 from shop import models as shop_models
 from shop.signals import inherit_parent_attributes_for_new_category
 import shop.signals
@@ -27,15 +27,34 @@ class Command(BaseCommand):
         # Clear ALL shop-related data to avoid ID conflicts
         self.stdout.write('Clearing existing shop data to avoid ID conflicts...')
         try:
-            # Delete in reverse dependency order
-            shop_models.ProductImage.objects.all().delete()
-            shop_models.ProductVariant.objects.all().delete()
-            shop_models.Product.objects.all().delete()
-            shop_models.CategoryAttribute.objects.all().delete()
-            shop_models.AttributeValue.objects.all().delete()
-            # Clear categories too so IDs match fixture
-            shop_models.Category.objects.all().delete()
-            self.stdout.write('Cleared existing shop data.')
+            vendor = connection.vendor
+            if vendor == "postgresql":
+                # Fast truncate with cascade and identity reset
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """
+                        TRUNCATE TABLE
+                            shop_productimage,
+                            shop_productvariant,
+                            shop_product,
+                            shop_categoryattribute,
+                            shop_attributevalue,
+                            shop_tag,
+                            shop_category
+                        RESTART IDENTITY CASCADE;
+                        """
+                    )
+                self.stdout.write('Cleared existing shop data (TRUNCATE).')
+            else:
+                # Fallback for sqlite/other: delete in reverse dependency order
+                shop_models.ProductImage.objects.all().delete()
+                shop_models.ProductVariant.objects.all().delete()
+                shop_models.Product.objects.all().delete()
+                shop_models.CategoryAttribute.objects.all().delete()
+                shop_models.AttributeValue.objects.all().delete()
+                shop_models.Tag.objects.all().delete()
+                shop_models.Category.objects.all().delete()
+                self.stdout.write('Cleared existing shop data (DELETE).')
         except Exception as e:
             self.stdout.write(f'Note when clearing: {str(e)[:100]}')
         
@@ -49,6 +68,7 @@ class Command(BaseCommand):
             # Import with transaction handling to handle duplicates gracefully
             import json
             from django.core.serializers import deserialize
+            from django.db import transaction
             
             fixture_file = 'shop/fixtures/initial_data.json'
             with open(fixture_file, 'r', encoding='utf-8') as f:
@@ -91,47 +111,65 @@ class Command(BaseCommand):
                 
                 for obj_data in objects:
                     try:
-                        # For CategoryAttribute, use get_or_create to avoid duplicates
-                        if model_name == 'shop.categoryattribute':
+                        # Upsert logic per model
+                        if model_name == 'shop.category':
                             fields = obj_data.get('fields', {})
-                            category_id = fields.get('category')
-                            # Check if category exists
-                            try:
-                                shop_models.Category.objects.get(pk=category_id)
-                                shop_models.CategoryAttribute.objects.get_or_create(
-                                    category_id=category_id,
-                                    key=fields.get('key'),
-                                    defaults={
-                                        'type': fields.get('type', 'text'),
-                                        'required': fields.get('required', False),
-                                        'display_order': fields.get('display_order', 0),
-                                        'label_fa': fields.get('label_fa', ''),
-                                        'is_displayed_in_product': fields.get('is_displayed_in_product', True),
-                                        'display_in_basket': fields.get('display_in_basket', False),
-                                    }
-                                )
-                                imported += 1
-                            except shop_models.Category.DoesNotExist:
-                                skipped += 1
-                                # Category doesn't exist - skip this attribute
-                                pass
+                            shop_models.Category.objects.update_or_create(
+                                pk=obj_data.get('pk'),
+                                defaults=fields
+                            )
+                            imported += 1
+                        elif model_name == 'shop.tag':
+                            fields = obj_data.get('fields', {})
+                            shop_models.Tag.objects.update_or_create(
+                                pk=obj_data.get('pk'),
+                                defaults=fields
+                            )
+                            imported += 1
+                        elif model_name == 'shop.categoryattribute':
+                            fields = obj_data.get('fields', {})
+                            shop_models.CategoryAttribute.objects.update_or_create(
+                                pk=obj_data.get('pk'),
+                                defaults=fields
+                            )
+                            imported += 1
+                        elif model_name == 'shop.attributevalue':
+                            fields = obj_data.get('fields', {})
+                            shop_models.AttributeValue.objects.update_or_create(
+                                pk=obj_data.get('pk'),
+                                defaults=fields
+                            )
+                            imported += 1
+                        elif model_name == 'shop.product':
+                            fields = obj_data.get('fields', {})
+                            shop_models.Product.objects.update_or_create(
+                                pk=obj_data.get('pk'),
+                                defaults=fields
+                            )
+                            imported += 1
+                        elif model_name == 'shop.productimage':
+                            fields = obj_data.get('fields', {})
+                            shop_models.ProductImage.objects.update_or_create(
+                                pk=obj_data.get('pk'),
+                                defaults=fields
+                            )
+                            imported += 1
+                        elif model_name == 'shop.productvariant':
+                            fields = obj_data.get('fields', {})
+                            shop_models.ProductVariant.objects.update_or_create(
+                                pk=obj_data.get('pk'),
+                                defaults=fields
+                            )
+                            imported += 1
                         else:
-                            # For other models, use normal deserialization
+                            # For any other models, fall back to deserialize
                             for obj in deserialize('json', json.dumps([obj_data])):
                                 obj.save()
                             imported += 1
-                    except IntegrityError as e:
-                        # Duplicate or constraint violation - skip it
-                        skipped += 1
-                        if skipped <= 5:  # Only show first few
-                            self.stdout.write(f'  ⚠️  Skipped duplicate: {model_name} pk={obj_data.get("pk")}')
                     except Exception as e:
-                        # Other error - log but continue
                         skipped += 1
-                        if 'duplicate' in str(e).lower() or 'unique' in str(e).lower():
-                            pass  # Expected duplicate
-                        else:
-                            self.stdout.write(f'  ⚠️  Error: {model_name} pk={obj_data.get("pk")}: {str(e)[:100]}')
+                        if skipped <= 5:
+                            self.stdout.write(f'  ⚠️  Error/skip: {model_name} pk={obj_data.get(\"pk\")}: {str(e)[:120]}')
             
             self.stdout.write(
                 self.style.SUCCESS(

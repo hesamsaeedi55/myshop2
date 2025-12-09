@@ -38,6 +38,25 @@ class Command(BaseCommand):
         # Database is empty, import data
         self.stdout.write('Database is empty. Importing initial data...')
         
+        # Clear ALL shop-related data to avoid ID conflicts
+        self.stdout.write('Clearing existing shop data to avoid ID conflicts...')
+        try:
+            from shop.models import (
+                ProductImage, ProductVariant, Product, CategoryAttribute, 
+                AttributeValue, Category
+            )
+            # Delete in reverse dependency order
+            ProductImage.objects.all().delete()
+            ProductVariant.objects.all().delete()
+            Product.objects.all().delete()
+            CategoryAttribute.objects.all().delete()
+            AttributeValue.objects.all().delete()
+            # Clear categories too so IDs match fixture
+            Category.objects.all().delete()
+            self.stdout.write('Cleared existing shop data.')
+        except Exception as e:
+            self.stdout.write(f'Note when clearing: {str(e)[:100]}')
+        
         # Disable signals during fixture loading to avoid dependency issues
         signal_disconnected = False
         try:

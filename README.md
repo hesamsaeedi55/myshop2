@@ -66,4 +66,4 @@ This project demonstrates a complete implementation of Google Sign-In in a Swift
 - iOS 15.0+
 - Xcode 13.0+
 - Swift 5.5+
-- GoogleSignIn-iOS package 
+- GoogleSignIn-iOS package # abnormal
